@@ -1,3 +1,93 @@
+/*
+Package irpc provides a lightweight, in-process RPC mechanism for Go applications.
+
+It allows modules to invoke each other using RPC-style keys without using
+network transports such as HTTP or gRPC. IRPC is designed to be minimal,
+fast, and suitable for Clean Architecture and Hexagonal Architecture.
+
+Key Concepts
+
+  - A "contract" is an interface that defines the available RPC methods.
+  - An "implementation" is a struct that implements the contract.
+  - IRPC automatically registers all methods from the interface with a prefix.
+  - Methods are invoked through a fast, reflection-free handler.
+
+Example Usage
+
+	registry := irpc.NewRegistry(irpc.DEFAULT_CONFIG)
+
+	// Register a contract
+	registry.RegisterContract("Exam", (*ExamContract)(nil), examService)
+
+	// Call a method
+	res, err := registry.Call(ctx, "Exam.FindExamById", ExamRequest{Id: "EX-1"})
+	if err != nil {
+	    log.Fatal(err)
+	}
+
+	fmt.Println(res.(*ExamResponse).Name)
+
+# Registry
+
+NewRegistry(config Config) *Registry
+
+	Creates a new registry with the provided configuration. If AllowOverride
+	is false, registering the same key twice will produce a panic.
+
+RegisterContract(serviceName string, iface any, impl any)
+
+	Registers all methods declared in the given interface (iface) and binds
+	them to the implementation (impl). Each method is registered under the key:
+	    serviceName + "." + MethodName
+
+Register(key string, h HandlerFunc)
+
+	Registers a handler function for a specific RPC key.
+
+Call(ctx context.Context, key string, req any) (any, error)
+
+	Invokes a registered handler. Panics or returns an error if the key does
+	not exist.
+
+# Configuration
+
+	type Config struct {
+	    AllowOverride bool
+	}
+
+	var DEFAULT_CONFIG = Config{
+	    AllowOverride: false,
+	}
+
+If AllowOverride is true, calling Register() or RegisterContract() with an
+existing key will silently override the previous handler.
+
+This is useful for plugin systems, hot reloads, or dynamic re-binding.
+
+HandlerFunc
+
+	type HandlerFunc func(ctx context.Context, req any) (any, error)
+
+HandlerFunc is the internal wrapper used to invoke RPC methods. IRPC generates
+HandlerFunc values when binding contract methods.
+
+Performance Characteristics
+
+  - No reflection at call time
+  - Constant-time handler lookup using a map
+  - Reflection only used during RegisterContract (startup only)
+  - Zero allocations during call if request/response types are pointer-based
+
+# Recommended Usage
+
+IRPC is ideal for projects that:
+
+  - Use Clean Architecture or Hex Architecture
+  - Have multiple modules but run inside one process
+  - Need RPC-like structure without network cost
+  - Want clear, explicit service contracts
+*/
+
 package irpc
 
 import (
