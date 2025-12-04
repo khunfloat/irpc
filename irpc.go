@@ -178,19 +178,19 @@ func (r *Registry) Call(ctx context.Context, key string, req any) (any, error) {
 	return h(ctx, req)
 }
 
-func (r *Registry) ValidateImpl(serviceName string, iface any, impl any) {
+func (r *Registry) ValidateImpl(serviceName string, iface any) {
 	ifaceType := reflect.TypeOf(iface).Elem()
-	implVal := reflect.ValueOf(impl)
 
 	for i := 0; i < ifaceType.NumMethod(); i++ {
 		mName := ifaceType.Method(i).Name
-		implMethod := implVal.MethodByName(mName)
+		key := serviceName + "." + mName
 
-		if !implMethod.IsValid() {
-			panic(fmt.Sprintf(
-				"irpc: missing implementation for %s.%s",
-				serviceName, mName,
-			))
+		r.mu.RLock()
+		_, exists := r.handlers[key]
+		r.mu.RUnlock()
+
+		if !exists {
+			panic(fmt.Sprintf("irpc: missing registered handler for %s", key))
 		}
 	}
 }
