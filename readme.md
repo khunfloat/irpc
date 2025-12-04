@@ -24,6 +24,8 @@ Everything runs in memory with near-zero overhead.
 - Optional override mode when re-registering keys
 - Uses interfaces as contracts (similar to gRPC service definitions)
 - Easy to build client stubs on top of the Registry
+- Optional partial contract implementation (AllowPartial)
+- Validation of contract implementation via ValidateImpl
 
 ## **Installation**
 
@@ -200,11 +202,13 @@ This performs a constant-time lookup and calls the handler without reflection.
 
 ```go
 type Config struct {
-	AllowOverride bool
+    AllowOverride bool
+    AllowPartial  bool
 }
 
 var DEFAULT_CONFIG = Config{
-	AllowOverride: false,
+    AllowOverride: false,
+    AllowPartial:  false,
 }
 ```
 

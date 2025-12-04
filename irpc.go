@@ -14,78 +14,62 @@ Key Concepts
 
 Example Usage
 
-	registry := irpc.NewRegistry(irpc.DEFAULT_CONFIG)
+    registry := irpc.NewRegistry(irpc.DEFAULT_CONFIG)
 
-	// Register a contract
-	registry.RegisterContract("Exam", (*ExamContract)(nil), examService)
+    // Register a contract
+    registry.RegisterContract("Exam", (*ExamContract)(nil), examService)
 
-	// Call a method
-	res, err := registry.Call(ctx, "Exam.FindExamById", ExamRequest{Id: "EX-1"})
-	if err != nil {
-	    log.Fatal(err)
-	}
+    // Call a method
+    res, err := registry.Call(ctx, "Exam.FindExamById", ExamRequest{Id: "EX-1"})
+    if err != nil {
+        log.Fatal(err)
+    }
 
-	fmt.Println(res.(*ExamResponse).Name)
+    fmt.Println(res.(*ExamResponse).Name)
 
 # Registry
 
 NewRegistry(config Config) *Registry
 
-	Creates a new registry with the provided configuration. If AllowOverride
-	is false, registering the same key twice will produce a panic.
+    Creates a new registry with the provided configuration. If AllowOverride
+    is false, registering the same key twice will produce a panic.
 
 RegisterContract(serviceName string, iface any, impl any)
 
-	Registers all methods declared in the given interface (iface) and binds
-	them to the implementation (impl). Each method is registered under the key:
-	    serviceName + "." + MethodName
+    Registers all methods declared in the given interface (iface) and binds
+    them to the implementation (impl). Each method is registered under the key:
+        serviceName + "." + MethodName
 
 Register(key string, h HandlerFunc)
 
-	Registers a handler function for a specific RPC key.
+    Registers a handler function for a specific RPC key.
 
-Call(ctx context.Context, key string, req any) (any, error)
+Call(ctx context.Context, key string, req any)
 
-	Invokes a registered handler. Panics or returns an error if the key does
-	not exist.
+    Invokes a registered handler. Panics or returns an error if the key does
+    not exist.
 
 # Configuration
 
-	type Config struct {
-	    AllowOverride bool
-	}
+    type Config struct {
+        AllowOverride bool
+        AllowPartial  bool
+    }
 
-	var DEFAULT_CONFIG = Config{
-	    AllowOverride: false,
-	}
+    var DEFAULT_CONFIG = Config{
+        AllowOverride: false,
+        AllowPartial:  false,
+    }
 
-If AllowOverride is true, calling Register() or RegisterContract() with an
-existing key will silently override the previous handler.
-
-This is useful for plugin systems, hot reloads, or dynamic re-binding.
+If AllowPartial is true, RegisterContract will silently skip missing methods
+instead of panicking.
 
 HandlerFunc
 
-	type HandlerFunc func(ctx context.Context, req any) (any, error)
+    type HandlerFunc func(ctx context.Context, req any) (any, error)
 
-HandlerFunc is the internal wrapper used to invoke RPC methods. IRPC generates
-HandlerFunc values when binding contract methods.
+Performance Characteristics remain unchanged.
 
-Performance Characteristics
-
-  - No reflection at call time
-  - Constant-time handler lookup using a map
-  - Reflection only used during RegisterContract (startup only)
-  - Zero allocations during call if request/response types are pointer-based
-
-# Recommended Usage
-
-IRPC is ideal for projects that:
-
-  - Use Clean Architecture or Hex Architecture
-  - Have multiple modules but run inside one process
-  - Need RPC-like structure without network cost
-  - Want clear, explicit service contracts
 */
 
 package irpc
@@ -99,10 +83,12 @@ import (
 
 type Config struct {
 	AllowOverride bool
+	AllowPartial  bool
 }
 
 var DEFAULT_CONFIG = Config{
 	AllowOverride: false,
+	AllowPartial:  false,
 }
 
 type HandlerFunc func(context.Context, any) (any, error)
@@ -135,6 +121,9 @@ func (r *Registry) RegisterContract(serviceName string, iface any, impl any) {
 
 		implMethod := implVal.MethodByName(mName)
 		if !implMethod.IsValid() {
+			if r.config.AllowPartial {
+				continue
+			}
 			panic(fmt.Sprintf("irpc: missing method: %s.%s", serviceName, mName))
 		}
 
@@ -187,4 +176,21 @@ func (r *Registry) Call(ctx context.Context, key string, req any) (any, error) {
 	}
 
 	return h(ctx, req)
+}
+
+func (r *Registry) ValidateImpl(serviceName string, iface any, impl any) {
+	ifaceType := reflect.TypeOf(iface).Elem()
+	implVal := reflect.ValueOf(impl)
+
+	for i := 0; i < ifaceType.NumMethod(); i++ {
+		mName := ifaceType.Method(i).Name
+		implMethod := implVal.MethodByName(mName)
+
+		if !implMethod.IsValid() {
+			panic(fmt.Sprintf(
+				"irpc: missing implementation for %s.%s",
+				serviceName, mName,
+			))
+		}
+	}
 }
